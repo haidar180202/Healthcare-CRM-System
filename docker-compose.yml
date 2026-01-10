@@ -1,0 +1,35 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+  chat-db:
+    image: postgres:13
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: chat
+    volumes:
+      - chat-db-data:/var/lib/postgresql/data
+
+  chat-service:
+    build:
+      context: ./services/chat-service
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - chat-db
+      - rabbitmq
+    environment:
+      DATABASE_URL: postgresql://user:password@chat-db:5432/chat
+      RABBITMQ_URL: amqp://user:password@rabbitmq:5672
+
+volumes:
+  chat-db-data:
