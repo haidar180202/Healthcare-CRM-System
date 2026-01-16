@@ -7,6 +7,11 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: user
       RABBITMQ_DEFAULT_PASS: password
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
   chat-db:
     image: postgres:13
     ports:
@@ -18,18 +23,103 @@ services:
     volumes:
       - chat-db-data:/var/lib/postgresql/data
 
+  auth-db:
+    image: postgres:13
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: auth
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d auth"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   chat-service:
     build:
       context: ./services/chat-service
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3002:3002"
     depends_on:
       - chat-db
       - rabbitmq
+
+
+
+  chat-worker:
+    build:
+      context: ./services/chat-worker
+      dockerfile: Dockerfile
+    depends_on:
+      - rabbitmq
+      - chat-db
+    restart: on-failure
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    depends_on:
+      auth-db:
+        condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://user:password@chat-db:5432/chat
-      RABBITMQ_URL: amqp://user:password@rabbitmq:5672
+      DATABASE_URL: postgresql://user:password@auth-db:5432/auth
+      JWT_SECRET: your-secret-key
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3001/auth || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - auth-service
+      - chat-service
+    dns:
+      - 8.8.8.8
+  #   image: client
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "5173:5173"
+  #   networks:
+  #     - mynetwork
+  #   depends_on:
+  #     - api-gateway
+  client:
+    image: client
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    networks:
+      - mynetwork
+    depends_on:
+      - api-gateway
+
+networks:
+  mynetwork:
+    driver: bridge
+
+#    environment:
+#      NEXT_PUBLIC_API_URL: http://localhost:3000/graphql
+#      NEXT_PUBLIC_WS_URL: ws://localhost:3000/graphql
 
 volumes:
   chat-db-data:
+  auth-db-data:

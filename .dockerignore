@@ -1,0 +1,28 @@
+# Git
+.git
+.gitignore
+
+# Dependencies
+**/node_modules
+
+# Build output
+dist
+*/dist
+
+# IDEs and editors
+.vscode
+.idea
+
+# Environment variables
+.env
+*.env
+
+# Logs
+*.log
+logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
