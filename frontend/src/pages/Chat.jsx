@@ -4,7 +4,7 @@ import {
   useMutation,
   useQuery,
   useSubscription,
-} from '@apollo/client/react/hooks';
+} from '@apollo/client';
 import { gql } from 'graphql-tag';
 import { useNavigate } from 'react-router-dom';
 
