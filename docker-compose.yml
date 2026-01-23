@@ -1,48 +1,29 @@
 services:
-  rabbitmq:
-    image: rabbitmq:3-management
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "4000:4000"
+    depends_on:
+      - auth-service
+      - chat-service
     environment:
-      RABBITMQ_DEFAULT_USER: user
-      RABBITMQ_DEFAULT_PASS: password
-    network_mode: "host"
+      - PORT=4000
+      - AUTH_SERVICE_URL=http://auth-service:3001/graphql
+      - CHAT_SERVICE_URL=http://chat-service:3002/graphql
 
-  redis:
-    image: redis:alpine
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
     ports:
-      - "6379:6379"
-    network_mode: "host"
-
-  chat-db:
-    image: postgres:13
-    ports:
-      - "5432:5432"
+      - "3001:3001"
+    depends_on:
+      - auth-db
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: chat
-    volumes:
-      - chat-db-data:/var/lib/postgresql/data
-    network_mode: "host"
-
-  auth-db:
-    image: postgres:13
-    ports:
-      - "5433:5432"
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: auth
-    volumes:
-      - auth-db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d auth"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    network_mode: "host"
+      - DATABASE_URL=postgresql://user:password@auth-db:5432/auth-db
+      - JWT_SECRET=your-super-secret-jwt-key
 
   chat-service:
     build:
@@ -53,9 +34,9 @@ services:
     depends_on:
       - chat-db
       - rabbitmq
-    dns:
-      - 8.8.8.8
-    network_mode: "host"
+    environment:
+      - DATABASE_URL=postgresql://user:password@chat-db:5432/chat-db
+      - RABBITMQ_URL=amqp://rabbitmq
 
   chat-worker:
     build:
@@ -63,61 +44,42 @@ services:
       dockerfile: Dockerfile
     depends_on:
       - rabbitmq
-      - chat-db
-    restart: on-failure
-    dns:
-      - 8.8.8.8
-    network_mode: "host"
-
-  auth-service:
-    build:
-      context: ./services/auth-service
-      dockerfile: Dockerfile
-    ports:
-      - "3001:3001"
-    depends_on:
-      auth-db:
-        condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://user:password@auth-db:5432/auth
-      JWT_SECRET: your-secret-key
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3001/auth || exit 0"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    dns:
-      - 8.8.8.8
-    network_mode: "host"
-
-  api-gateway:
-    build:
-      context: ./services/api-gateway
-      dockerfile: Dockerfile
-    ports:
-      - "4000:4000" # Port GraphQL
-    depends_on:
-      - auth-service
-      - chat-service
-    dns:
-      - 8.8.8.8
-    network_mode: "host"
+      - RABBITMQ_URL=amqp://rabbitmq
 
   client:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000" # Port Frontend
+      - "3000:3000"
     depends_on:
       - api-gateway
+
+  auth-db:
+    image: postgres:13
     environment:
-      - WDS_SOCKET_PORT=3000
-    dns:
-      - 8.8.8.8
-    network_mode: "host"
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=auth-db
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+
+  chat-db:
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=chat-db
+    volumes:
+      - chat-db-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:latest
+
+  rabbitmq:
+    image: rabbitmq:3-management
 
 volumes:
-  chat-db-data:
   auth-db-data:
+  chat-db-data:
